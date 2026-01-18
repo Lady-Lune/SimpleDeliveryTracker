@@ -67,12 +67,26 @@ export function parseCoordinates(mapLink: string): { lat: number; lng: number } 
   }
 }
 
+// Format private key - handles both escaped \n and actual newlines
+function formatPrivateKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
+  
+  // If the key contains literal \n (as two characters), replace with actual newlines
+  // This handles keys pasted with escaped newlines
+  let formatted = key.replace(/\\n/g, '\n');
+  
+  // Also handle double-escaped newlines (\\n becoming \n in some environments)
+  formatted = formatted.replace(/\n/g, '\n');
+  
+  return formatted;
+}
+
 // Get authenticated Google Sheets client
 async function getAuthenticatedClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      private_key: formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY),
     },
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
