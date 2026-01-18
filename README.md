@@ -2,6 +2,9 @@
 
 A mobile-friendly web application to coordinate food parcel deliveries from a central point to scattered recipients. Uses a Google Sheet as the backend database and displays recipients as interactive pins on a map.
 
+## Disclaimer
+Every single line of code in this repo is coded with agents. Claude Opus mostly :)
+
 ## Features
 
 - 🗺️ Interactive OpenStreetMap interface (free, no API key required)
