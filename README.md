@@ -7,7 +7,7 @@ A mobile-friendly web application to coordinate food parcel deliveries from a ce
 - 🗺️ Interactive OpenStreetMap interface (free, no API key required)
 - 📍 Color-coded markers (Red: Pending, Yellow: In Progress, Green: Delivered)
 - 📱 Mobile-friendly responsive design
-- 🔐 Simple shared password authentication
+- 🔐 Multiple access codes with rate limiting
 - 📊 Real-time delivery statistics
 - 🔍 Filter by status and faculty
 - 📞 Click-to-call phone numbers
@@ -25,13 +25,18 @@ A mobile-friendly web application to coordinate food parcel deliveries from a ce
 
 2. **Google Sheet Setup:**
    - Create a Google Sheet with these columns:
-     - A: `Google Map Link` (URL with coordinates)
-     - B: `Recipient Type` (e.g., "Girls", "Boys")
-     - C: `Parcels` (Number)
-     - D: `Faculty` (e.g., "Computing")
-     - E: `Phone` (Phone number)
-     - F: `Status` ("Pending", "On the way", or "Delivered")
+     - A: `ID` (Unique identifier for each row - **REQUIRED**)
+     - B: `Google Map Link` (URL with coordinates)
+     - C: `Latitude` (auto-populated from link, or "error" if parsing fails)
+     - D: `Longitude` (auto-populated from link, or "error" if parsing fails)
+     - E: `Recipient Type` (e.g., "Girls", "Boys")
+     - F: `Parcels` (Number)
+     - G: `Faculty` (e.g., "Computing")
+     - H: `Phone` (Primary phone number)
+     - I: `Secondary Phone` (Optional backup number)
+     - J: `Status` ("Pending", "On the way", or "Delivered")
    - Share the sheet with your Service Account email (Editor access)
+   - **Note:** Latitude/Longitude are auto-filled when the app reads the sheet. Leave them blank initially.
 
 ### Environment Setup
 
@@ -45,7 +50,14 @@ Required variables:
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Your service account email
 - `GOOGLE_PRIVATE_KEY` - Private key from the JSON file (keep the \n characters)
 - `GOOGLE_SHEET_ID` - The ID from your Google Sheet URL
-- `ADMIN_ACCESS_CODE` - A shared password for deliverers
+- `ACCESS_CODES` - Comma-separated list of access codes (e.g., "driver1,driver2,driver3")
+- `ADMIN_ACCESS_CODE` - (Legacy) Single shared password, still supported
+
+### Security Features
+
+- **Multiple Access Codes:** Use `ACCESS_CODES` to give each driver their own code. Revoke individual access by removing their code.
+- **Rate Limiting:** Login is limited to 5 failed attempts per IP, with a 15-minute lockout.
+- **Stable Row IDs:** Rows are identified by the ID column (G), not row number. This prevents data corruption if rows are inserted/deleted.
 
 ### Development
 
@@ -64,7 +76,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
    - `GOOGLE_PRIVATE_KEY`
    - `GOOGLE_SHEET_ID`
-   - `ADMIN_ACCESS_CODE`
+   - `ACCESS_CODES` (recommended) or `ADMIN_ACCESS_CODE`
 4. Deploy!
 
 ## Tech Stack

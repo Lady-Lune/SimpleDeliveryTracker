@@ -82,7 +82,7 @@ function LocateControl() {
 
 interface MapComponentProps {
   recipients: Recipient[];
-  onStatusUpdate: (rowIndex: number, status: 'Pending' | 'On the way' | 'Delivered') => void;
+  onStatusUpdate: (id: string, status: 'Pending' | 'On the way' | 'Delivered') => void;
 }
 
 export default function MapComponent({ recipients, onStatusUpdate }: MapComponentProps) {
@@ -121,7 +121,7 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
 
       {validRecipients.map((recipient) => (
         <Marker
-          key={recipient.rowIndex}
+          key={recipient.id}
           position={[recipient.coordinates!.lat, recipient.coordinates!.lng]}
           icon={statusIcons[recipient.status] || statusIcons.Pending}
         >
@@ -159,9 +159,19 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
               {recipient.phone && (
                 <a
                   href={`tel:${recipient.phone}`}
-                  style={{ display: 'inline-block', color: '#2563eb', marginBottom: '12px' }}
+                  style={{ display: 'block', color: '#2563eb', marginBottom: '4px' }}
                 >
                   📞 {recipient.phone}
+                </a>
+              )}
+
+              {/* Secondary Phone - Click to call */}
+              {recipient.secondaryPhone && (
+                <a
+                  href={`tel:${recipient.secondaryPhone}`}
+                  style={{ display: 'block', color: '#2563eb', marginBottom: '12px' }}
+                >
+                  📱 {recipient.secondaryPhone}
                 </a>
               )}
 
@@ -196,7 +206,7 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
               <div style={{ display: 'flex', gap: '8px' }}>
                 {recipient.status !== 'On the way' && (
                   <button
-                    onClick={() => onStatusUpdate(recipient.rowIndex, 'On the way')}
+                    onClick={() => onStatusUpdate(recipient.id, 'On the way')}
                     style={{
                       flex: 1,
                       padding: '8px 12px',
@@ -214,7 +224,7 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
                 )}
                 {recipient.status !== 'Delivered' && (
                   <button
-                    onClick={() => onStatusUpdate(recipient.rowIndex, 'Delivered')}
+                    onClick={() => onStatusUpdate(recipient.id, 'Delivered')}
                     style={{
                       flex: 1,
                       padding: '8px 12px',

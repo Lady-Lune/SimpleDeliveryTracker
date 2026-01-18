@@ -102,7 +102,7 @@ export default function MapPage() {
 
   // Handle status update (optimistic UI)
   const handleStatusUpdate = async (
-    rowIndex: number,
+    id: string,
     status: 'Pending' | 'On the way' | 'Delivered'
   ) => {
     if (!adminCode) return;
@@ -110,7 +110,7 @@ export default function MapPage() {
     // Optimistic update
     setRecipients((prev) =>
       prev.map((r) =>
-        r.rowIndex === rowIndex ? { ...r, status } : r
+        r.id === id ? { ...r, status } : r
       )
     );
 
@@ -121,7 +121,7 @@ export default function MapPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminCode}`,
         },
-        body: JSON.stringify({ rowIndex, status }),
+        body: JSON.stringify({ id, status }),
       });
 
       if (!response.ok) {

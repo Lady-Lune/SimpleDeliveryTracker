@@ -1,18 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRecipients, updateDeliveryStatus } from '@/lib/googleSheets';
 
+// Get all valid access codes from environment
+function getValidAccessCodes(): string[] {
+  // Support both ACCESS_CODES (comma-separated list) and legacy ADMIN_ACCESS_CODE
+  const codesList = process.env.ACCESS_CODES;
+  const legacyCode = process.env.ADMIN_ACCESS_CODE;
+
+  const codes: string[] = [];
+
+  if (codesList) {
+    codes.push(...codesList.split(',').map((c) => c.trim()).filter(Boolean));
+  }
+
+  if (legacyCode && !codes.includes(legacyCode)) {
+    codes.push(legacyCode);
+  }
+
+  return codes;
+}
+
 // Verify the admin access code
 function verifyAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get('Authorization');
-  const adminCode = process.env.ADMIN_ACCESS_CODE;
+  const validCodes = getValidAccessCodes();
 
-  if (!authHeader || !adminCode) {
+  if (!authHeader || validCodes.length === 0) {
     return false;
   }
 
   // Expected format: "Bearer <code>"
   const token = authHeader.replace('Bearer ', '');
-  return token === adminCode;
+  return validCodes.includes(token);
 }
 
 // GET /api/recipients - Fetch all recipients
@@ -47,31 +66,40 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { rowIndex, status } = body;
+    const { id, status } = body;
 
-    if (!rowIndex || !status) {
+    // Validate id: must be a non-empty string
+    if (!id || typeof id !== 'string') {
       return NextResponse.json(
-        { error: 'Missing rowIndex or status' },
+        { error: 'Missing or invalid id (must be a string)' },
         { status: 400 }
       );
     }
 
-    const validStatuses = ['Pending', 'On the way', 'Delivered'];
-    if (!validStatuses.includes(status)) {
+    // Validate status: must be a string and one of the valid statuses
+    if (!status || typeof status !== 'string') {
+      return NextResponse.json(
+        { error: 'Missing or invalid status' },
+        { status: 400 }
+      );
+    }
+
+    const validStatuses = ['Pending', 'On the way', 'Delivered'] as const;
+    if (!validStatuses.includes(status as typeof validStatuses[number])) {
       return NextResponse.json(
         { error: 'Invalid status. Must be: Pending, On the way, or Delivered' },
         { status: 400 }
       );
     }
 
-    const success = await updateDeliveryStatus(rowIndex, status);
+    const success = await updateDeliveryStatus(id, status as 'Pending' | 'On the way' | 'Delivered');
 
     if (success) {
-      return NextResponse.json({ success: true, rowIndex, status });
+      return NextResponse.json({ success: true, id, status });
     } else {
       return NextResponse.json(
-        { error: 'Failed to update status' },
-        { status: 500 }
+        { error: 'Failed to update status. Recipient not found.' },
+        { status: 404 }
       );
     }
   } catch (error) {
