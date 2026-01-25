@@ -15,7 +15,7 @@ const MapComponent = dynamic(() => import('@/components/Map'), {
   ),
 });
 
-type StatusFilter = 'all' | 'Pending' | 'On the way' | 'Delivered';
+type StatusFilter = 'all' | 'Not Delivered' | 'Next' | 'Delivered';
 
 export default function MapPage() {
   const router = useRouter();
@@ -82,7 +82,7 @@ export default function MapPage() {
   // Calculate stats (must be before any early returns to maintain hook order)
   const totalRecipients = recipients.length;
   const deliveredCount = recipients.filter((r) => r.status === 'Delivered').length;
-  const inProgressCount = recipients.filter((r) => r.status === 'On the way').length;
+  const inProgressCount = recipients.filter((r) => r.status === 'Next').length;
 
   // Get unique faculties for filter dropdown (must be before any early returns)
   const faculties = useMemo(() => {
@@ -109,7 +109,8 @@ export default function MapPage() {
   // Handle status update (optimistic UI)
   const handleStatusUpdate = async (
     id: string,
-    status: 'Pending' | 'On the way' | 'Delivered'
+    status: 'Not Delivered' | 'Next' | 'Delivered',
+    location?: { lat: number; lng: number }
   ) => {
     if (!adminCode) return;
 
@@ -121,13 +122,18 @@ export default function MapPage() {
     );
 
     try {
+      const body: { id: string; status: string; deliveryLocation?: { lat: number; lng: number } } = { id, status };
+      if (location) {
+        body.deliveryLocation = location;
+      }
+
       const response = await fetch('/api/recipients', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminCode}`,
         },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -199,7 +205,7 @@ export default function MapPage() {
         </span>
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-          {inProgressCount} In Progress
+          {inProgressCount} Next
         </span>
       </div>
 
@@ -215,8 +221,8 @@ export default function MapPage() {
             className="bg-zinc-600 border border-zinc-500 rounded px-2 py-1 text-white text-sm"
           >
             <option value="all">All</option>
-            <option value="Pending">Pending</option>
-            <option value="On the way">On the way</option>
+            <option value="Not Delivered">Not Delivered</option>
+            <option value="Next">Next</option>
             <option value="Delivered">Delivered</option>
           </select>
         </div>

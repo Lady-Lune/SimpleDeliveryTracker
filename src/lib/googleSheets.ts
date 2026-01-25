@@ -11,7 +11,7 @@ export interface Recipient {
   faculty: string;
   phone: string;
   secondaryPhone: string;
-  status: 'Pending' | 'On the way' | 'Delivered';
+  status: 'Not Delivered' | 'Next' | 'Delivered';
 }
 
 // Parse coordinates from various Google Maps link formats
@@ -236,7 +236,7 @@ export async function getRecipients(): Promise<Recipient[]> {
         faculty: row[6] || '',
         phone: row[7] || '',
         secondaryPhone: row[8] || '',
-        status: (row[9] as Recipient['status']) || 'Pending',
+        status: (row[9] as Recipient['status']) || 'Not Delivered',
       },
       actualRowIndex,
       needsShortLinkResolution,
@@ -310,7 +310,7 @@ async function updateCoordinatesInSheet(
 // Update the delivery status for a specific recipient by ID (column A)
 export async function updateDeliveryStatus(
   id: string,
-  status: 'Pending' | 'On the way' | 'Delivered'
+  status: 'Not Delivered' | 'Next' | 'Delivered'
 ): Promise<boolean> {
   const sheets = await getAuthenticatedClient();
   const sheetId = process.env.GOOGLE_SHEET_ID;
@@ -362,5 +362,117 @@ export async function updateDeliveryStatus(
   } catch (error) {
     console.error('Error updating delivery status:', error);
     return false;
+  }
+}
+
+// Log delivery location to Sheet2 (audit trail)
+export async function logDelivery(
+  id: string,
+  lat: number,
+  lng: number
+): Promise<boolean> {
+  const sheets = await getAuthenticatedClient();
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+
+  if (!sheetId) {
+    throw new Error('GOOGLE_SHEET_ID is not configured');
+  }
+
+  try {
+    const timestamp = new Date().toISOString();
+
+    // Append a new row to Sheet2
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: sheetId,
+      range: 'Sheet2!A:D',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[id, lat.toString(), lng.toString(), timestamp]],
+      },
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error logging delivery:', error);
+    return false;
+  }
+}
+
+// Get recent deliveries from Sheet2 (for public live page)
+export async function getRecentDeliveries(count: number = 3): Promise<{
+  lat: number;
+  lng: number;
+  time: string;
+}[]> {
+  const sheets = await getAuthenticatedClient();
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+
+  if (!sheetId) {
+    throw new Error('GOOGLE_SHEET_ID is not configured');
+  }
+
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: 'Sheet2!A:D',
+    });
+
+    const rows = response.data.values;
+    if (!rows || rows.length < 2) {
+      return [];
+    }
+
+    // Skip header, get all data rows, reverse to get most recent first
+    const dataRows = rows.slice(1).reverse();
+
+    // Take the last N deliveries
+    const recentRows = dataRows.slice(0, count);
+
+    return recentRows
+      .filter((row) => row[1] && row[2]) // Must have lat/lng
+      .map((row) => ({
+        lat: parseFloat(row[1]),
+        lng: parseFloat(row[2]),
+        time: row[3] || '',
+      }));
+  } catch (error) {
+    console.error('Error fetching recent deliveries:', error);
+    return [];
+  }
+}
+
+// Get delivery stats from Sheet1 (for public live page)
+export async function getDeliveryStats(): Promise<{
+  delivered: number;
+  total: number;
+}> {
+  const sheets = await getAuthenticatedClient();
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+
+  if (!sheetId) {
+    throw new Error('GOOGLE_SHEET_ID is not configured');
+  }
+
+  try {
+    // Fetch just the Status column (J) and ID column (A) to count
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: 'Sheet1!A:J',
+    });
+
+    const rows = response.data.values;
+    if (!rows || rows.length < 2) {
+      return { delivered: 0, total: 0 };
+    }
+
+    // Skip header, count rows with valid ID
+    const dataRows = rows.slice(1).filter((row) => row[0]); // Must have ID
+    const total = dataRows.length;
+    const delivered = dataRows.filter((row) => row[9] === 'Delivered').length;
+
+    return { delivered, total };
+  } catch (error) {
+    console.error('Error fetching delivery stats:', error);
+    return { delivered: 0, total: 0 };
   }
 }
