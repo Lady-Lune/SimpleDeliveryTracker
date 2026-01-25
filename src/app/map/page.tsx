@@ -21,6 +21,7 @@ export default function MapPage() {
   const router = useRouter();
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [adminCode, setAdminCode] = useState<string | null>(null);
   
@@ -40,8 +41,12 @@ export default function MapPage() {
   }, [router]);
 
   // Fetch recipients
-  const fetchRecipients = useCallback(async () => {
+  const fetchRecipients = useCallback(async (isRefresh = false) => {
     if (!adminCode) return;
+
+    if (isRefresh) {
+      setRefreshing(true);
+    }
 
     try {
       const response = await fetch('/api/recipients', {
@@ -64,6 +69,7 @@ export default function MapPage() {
       setError('Failed to load recipients');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [adminCode, router]);
 
@@ -153,7 +159,7 @@ export default function MapPage() {
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-900 gap-4">
         <div className="text-red-400 text-xl">{error}</div>
         <button
-          onClick={fetchRecipients}
+          onClick={() => fetchRecipients()}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg"
         >
           Retry
@@ -167,12 +173,22 @@ export default function MapPage() {
       {/* Header */}
       <header className="bg-zinc-900 text-white px-4 py-3 flex items-center justify-between z-10">
         <h1 className="text-lg font-bold">Delivery Coordinator</h1>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-zinc-400 hover:text-white transition-colors"
-        >
-          Logout
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => fetchRecipients(true)}
+            disabled={refreshing}
+            className="text-sm text-zinc-400 hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-zinc-400 hover:text-white transition-colors"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* Stats Dashboard */}
