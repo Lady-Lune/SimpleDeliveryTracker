@@ -15,12 +15,14 @@ const MapComponent = dynamic(() => import('@/components/Map'), {
   ),
 });
 
-type StatusFilter = 'all' | 'Pending' | 'On the way' | 'Delivered';
+type StatusFilter = 'all' | 'Not Delivered' | 'Next' | 'Delivered';
 
 export default function MapPage() {
   const router = useRouter();
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
   const [adminCode, setAdminCode] = useState<string | null>(null);
   
@@ -40,8 +42,12 @@ export default function MapPage() {
   }, [router]);
 
   // Fetch recipients
-  const fetchRecipients = useCallback(async () => {
+  const fetchRecipients = useCallback(async (isRefresh = false) => {
     if (!adminCode) return;
+
+    if (isRefresh) {
+      setRefreshing(true);
+    }
 
     try {
       const response = await fetch('/api/recipients', {
@@ -64,6 +70,7 @@ export default function MapPage() {
       setError('Failed to load recipients');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [adminCode, router]);
 
@@ -76,7 +83,7 @@ export default function MapPage() {
   // Calculate stats (must be before any early returns to maintain hook order)
   const totalRecipients = recipients.length;
   const deliveredCount = recipients.filter((r) => r.status === 'Delivered').length;
-  const inProgressCount = recipients.filter((r) => r.status === 'On the way').length;
+  const inProgressCount = recipients.filter((r) => r.status === 'Next').length;
 
   // Get unique faculties for filter dropdown (must be before any early returns)
   const faculties = useMemo(() => {
@@ -103,7 +110,8 @@ export default function MapPage() {
   // Handle status update (optimistic UI)
   const handleStatusUpdate = async (
     id: string,
-    status: 'Pending' | 'On the way' | 'Delivered'
+    status: 'Not Delivered' | 'Next' | 'Delivered',
+    location?: { lat: number | null; lng: number | null }
   ) => {
     if (!adminCode) return;
 
@@ -115,13 +123,18 @@ export default function MapPage() {
     );
 
     try {
+      const body: { id: string; status: string; deliveryLocation?: { lat: number | null; lng: number | null } } = { id, status };
+      if (location !== undefined) {
+        body.deliveryLocation = location;
+      }
+
       const response = await fetch('/api/recipients', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminCode}`,
         },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -131,6 +144,39 @@ export default function MapPage() {
     } catch {
       // Revert on error
       fetchRecipients();
+    }
+  };
+
+  // End delivery / reset for new day
+  const handleEndDelivery = async () => {
+    if (!adminCode) return;
+
+    const confirmed = window.confirm(
+      '⚠️ End Delivery Day?\n\nThis will:\n• Reset all "Delivered" items to "Not Delivered"\n• Clear all delivery location logs\n\nThis action cannot be undone.'
+    );
+
+    if (!confirmed) return;
+
+    setResetting(true);
+
+    try {
+      const response = await fetch('/api/recipients', {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${adminCode}`,
+        },
+      });
+
+      if (response.ok) {
+        // Refresh data to show reset state
+        await fetchRecipients(true);
+      } else {
+        alert('Failed to reset deliveries. Please try again.');
+      }
+    } catch {
+      alert('Failed to reset deliveries. Please try again.');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -153,7 +199,7 @@ export default function MapPage() {
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-900 gap-4">
         <div className="text-red-400 text-xl">{error}</div>
         <button
-          onClick={fetchRecipients}
+          onClick={() => fetchRecipients()}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg"
         >
           Retry
@@ -167,24 +213,43 @@ export default function MapPage() {
       {/* Header */}
       <header className="bg-zinc-900 text-white px-4 py-3 flex items-center justify-between z-10">
         <h1 className="text-lg font-bold">Delivery Coordinator</h1>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-zinc-400 hover:text-white transition-colors"
-        >
-          Logout
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => fetchRecipients(true)}
+            disabled={refreshing}
+            className="text-sm text-zinc-400 hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-zinc-400 hover:text-white transition-colors"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* Stats Dashboard */}
-      <div className="bg-zinc-800 text-white px-4 py-2 flex gap-4 text-sm">
+      <div className="bg-zinc-800 text-white px-4 py-2 flex gap-4 text-sm items-center">
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 bg-green-500 rounded-full"></span>
           {deliveredCount}/{totalRecipients} Delivered
         </span>
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-          {inProgressCount} In Progress
+          {inProgressCount} Next
         </span>
+        {deliveredCount === totalRecipients && totalRecipients > 0 && (
+          <button
+            onClick={handleEndDelivery}
+            disabled={resetting}
+            className="ml-auto text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors disabled:opacity-50"
+          >
+            {resetting ? 'Resetting...' : '🏁 End Delivery'}
+          </button>
+        )}
       </div>
 
       {/* Filter Controls */}
@@ -199,8 +264,8 @@ export default function MapPage() {
             className="bg-zinc-600 border border-zinc-500 rounded px-2 py-1 text-white text-sm"
           >
             <option value="all">All</option>
-            <option value="Pending">Pending</option>
-            <option value="On the way">On the way</option>
+            <option value="Not Delivered">Not Delivered</option>
+            <option value="Next">Next</option>
             <option value="Delivered">Delivered</option>
           </select>
         </div>

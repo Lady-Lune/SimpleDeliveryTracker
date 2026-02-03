@@ -26,8 +26,8 @@ const createColoredIcon = (color: string) => {
 };
 
 const statusIcons = {
-  Pending: createColoredIcon('#ef4444'),
-  'On the way': createColoredIcon('#eab308'),
+  'Not Delivered': createColoredIcon('#ef4444'),
+  'Next': createColoredIcon('#eab308'),
   Delivered: createColoredIcon('#22c55e'),
 };
 
@@ -82,7 +82,7 @@ function LocateControl() {
 
 interface MapComponentProps {
   recipients: Recipient[];
-  onStatusUpdate: (id: string, status: 'Pending' | 'On the way' | 'Delivered') => void;
+  onStatusUpdate: (id: string, status: 'Not Delivered' | 'Next' | 'Delivered', location?: { lat: number | null; lng: number | null }) => void;
 }
 
 export default function MapComponent({ recipients, onStatusUpdate }: MapComponentProps) {
@@ -108,6 +108,7 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
 
   return (
     <MapContainer
+      key="main-map"
       center={defaultCenter}
       zoom={13}
       style={{ height: '100%', width: '100%' }}
@@ -123,7 +124,7 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
         <Marker
           key={recipient.id}
           position={[recipient.coordinates!.lat, recipient.coordinates!.lng]}
-          icon={statusIcons[recipient.status] || statusIcons.Pending}
+          icon={statusIcons[recipient.status] || statusIcons['Not Delivered']}
         >
           <Popup>
             <div style={{ minWidth: '200px', padding: '4px' }}>
@@ -185,15 +186,15 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
                     fontSize: '12px',
                     fontWeight: 500,
                     backgroundColor:
-                      recipient.status === 'Pending'
+                      recipient.status === 'Not Delivered'
                         ? '#fef2f2'
-                        : recipient.status === 'On the way'
+                        : recipient.status === 'Next'
                         ? '#fefce8'
                         : '#f0fdf4',
                     color:
-                      recipient.status === 'Pending'
+                      recipient.status === 'Not Delivered'
                         ? '#991b1b'
-                        : recipient.status === 'On the way'
+                        : recipient.status === 'Next'
                         ? '#854d0e'
                         : '#166534',
                   }}
@@ -204,9 +205,9 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '8px' }}>
-                {recipient.status !== 'On the way' && (
+                {recipient.status !== 'Next' && (
                   <button
-                    onClick={() => onStatusUpdate(recipient.id, 'On the way')}
+                    onClick={() => onStatusUpdate(recipient.id, 'Next')}
                     style={{
                       flex: 1,
                       padding: '8px 12px',
@@ -219,12 +220,32 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
                       cursor: 'pointer',
                     }}
                   >
-                    In Progress
+                    Next
                   </button>
                 )}
                 {recipient.status !== 'Delivered' && (
                   <button
-                    onClick={() => onStatusUpdate(recipient.id, 'Delivered')}
+                    onClick={() => {
+                      // Capture GPS silently on delivery
+                      if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                          (position) => {
+                            onStatusUpdate(recipient.id, 'Delivered', {
+                              lat: position.coords.latitude,
+                              lng: position.coords.longitude,
+                            });
+                          },
+                          () => {
+                            // GPS failed, use recipient's coordinates as fallback
+                            onStatusUpdate(recipient.id, 'Delivered', recipient.coordinates || undefined);
+                          },
+                          { timeout: 5000, enableHighAccuracy: true }
+                        );
+                      } else {
+                        // Geolocation not supported, use recipient's coordinates as fallback
+                        onStatusUpdate(recipient.id, 'Delivered', recipient.coordinates || undefined);
+                      }
+                    }}
                     style={{
                       flex: 1,
                       padding: '8px 12px',

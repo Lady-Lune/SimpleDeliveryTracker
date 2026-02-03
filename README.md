@@ -8,7 +8,7 @@ Every single line of code in this repo is coded with agents. Claude Opus mostly 
 ## Features
 
 - 🗺️ Interactive OpenStreetMap interface (free, no API key required)
-- 📍 Color-coded markers (Red: Pending, Yellow: In Progress, Green: Delivered)
+- 📍 Color-coded markers (Red: Not Delivered, Yellow: Next, Green: Delivered)
 - 📱 Mobile-friendly responsive design
 - 🔐 Multiple access codes with rate limiting
 - 📊 Real-time delivery statistics
@@ -37,7 +37,7 @@ Every single line of code in this repo is coded with agents. Claude Opus mostly 
      - G: `Faculty` (e.g., "Computing")
      - H: `Phone` (Primary phone number)
      - I: `Secondary Phone` (Optional backup number)
-     - J: `Status` ("Pending", "On the way", or "Delivered")
+     - J: `Status` ("Not Delivered", "Next", or "Delivered")
    - Share the sheet with your Service Account email (Editor access)
    - **Note:** Latitude/Longitude are auto-filled when the app reads the sheet. Leave them blank initially.
 
