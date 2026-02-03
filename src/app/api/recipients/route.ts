@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRecipients, updateDeliveryStatus, logDelivery } from '@/lib/googleSheets';
+import { getRecipients, updateDeliveryStatus, logDelivery, resetDeliveries } from '@/lib/googleSheets';
 
 // Get all valid access codes from environment
 function getValidAccessCodes(): string[] {
@@ -95,10 +95,14 @@ export async function PATCH(request: NextRequest) {
     const success = await updateDeliveryStatus(id, status as 'Not Delivered' | 'Next' | 'Delivered');
 
     if (success) {
-      // Log delivery location to Sheet2 if status is Delivered and location is provided
-      if (status === 'Delivered' && deliveryLocation?.lat && deliveryLocation?.lng) {
+      // Log delivery location to Sheet2 if status is Delivered
+      if (status === 'Delivered' && deliveryLocation !== undefined) {
+        // Check if location was captured or if it's an error (null values)
+        const lat = deliveryLocation.lat !== null ? deliveryLocation.lat : 'error';
+        const lng = deliveryLocation.lng !== null ? deliveryLocation.lng : 'error';
+        
         // Fire and forget - don't block the response
-        logDelivery(id, deliveryLocation.lat, deliveryLocation.lng).catch((err) => {
+        logDelivery(id, lat, lng).catch((err) => {
           console.error('Error logging delivery location:', err);
         });
       }
@@ -114,6 +118,35 @@ export async function PATCH(request: NextRequest) {
     console.error('Error updating status:', error);
     return NextResponse.json(
       { error: 'Failed to update status' },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/recipients - Reset all deliveries for a new day
+export async function DELETE(request: NextRequest) {
+  if (!verifyAuth(request)) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const success = await resetDeliveries();
+
+    if (success) {
+      return NextResponse.json({ success: true, message: 'All deliveries reset for new day' });
+    } else {
+      return NextResponse.json(
+        { error: 'Failed to reset deliveries' },
+        { status: 500 }
+      );
+    }
+  } catch (error) {
+    console.error('Error resetting deliveries:', error);
+    return NextResponse.json(
+      { error: 'Failed to reset deliveries' },
       { status: 500 }
     );
   }

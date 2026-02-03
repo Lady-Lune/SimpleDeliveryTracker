@@ -22,6 +22,7 @@ export default function MapPage() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
   const [adminCode, setAdminCode] = useState<string | null>(null);
   
@@ -110,7 +111,7 @@ export default function MapPage() {
   const handleStatusUpdate = async (
     id: string,
     status: 'Not Delivered' | 'Next' | 'Delivered',
-    location?: { lat: number; lng: number }
+    location?: { lat: number | null; lng: number | null }
   ) => {
     if (!adminCode) return;
 
@@ -122,8 +123,8 @@ export default function MapPage() {
     );
 
     try {
-      const body: { id: string; status: string; deliveryLocation?: { lat: number; lng: number } } = { id, status };
-      if (location) {
+      const body: { id: string; status: string; deliveryLocation?: { lat: number | null; lng: number | null } } = { id, status };
+      if (location !== undefined) {
         body.deliveryLocation = location;
       }
 
@@ -143,6 +144,39 @@ export default function MapPage() {
     } catch {
       // Revert on error
       fetchRecipients();
+    }
+  };
+
+  // End delivery / reset for new day
+  const handleEndDelivery = async () => {
+    if (!adminCode) return;
+
+    const confirmed = window.confirm(
+      '⚠️ End Delivery Day?\n\nThis will:\n• Reset all "Delivered" items to "Not Delivered"\n• Clear all delivery location logs\n\nThis action cannot be undone.'
+    );
+
+    if (!confirmed) return;
+
+    setResetting(true);
+
+    try {
+      const response = await fetch('/api/recipients', {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${adminCode}`,
+        },
+      });
+
+      if (response.ok) {
+        // Refresh data to show reset state
+        await fetchRecipients(true);
+      } else {
+        alert('Failed to reset deliveries. Please try again.');
+      }
+    } catch {
+      alert('Failed to reset deliveries. Please try again.');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -198,7 +232,7 @@ export default function MapPage() {
       </header>
 
       {/* Stats Dashboard */}
-      <div className="bg-zinc-800 text-white px-4 py-2 flex gap-4 text-sm">
+      <div className="bg-zinc-800 text-white px-4 py-2 flex gap-4 text-sm items-center">
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 bg-green-500 rounded-full"></span>
           {deliveredCount}/{totalRecipients} Delivered
@@ -207,6 +241,15 @@ export default function MapPage() {
           <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
           {inProgressCount} Next
         </span>
+        {deliveredCount === totalRecipients && totalRecipients > 0 && (
+          <button
+            onClick={handleEndDelivery}
+            disabled={resetting}
+            className="ml-auto text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors disabled:opacity-50"
+          >
+            {resetting ? 'Resetting...' : '🏁 End Delivery'}
+          </button>
+        )}
       </div>
 
       {/* Filter Controls */}

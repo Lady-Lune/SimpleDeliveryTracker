@@ -74,9 +74,14 @@ export default function LiveMapComponent({ recentDeliveries }: LiveMapComponentP
     );
   }
 
+  // Filter out any deliveries with invalid coordinates (NaN)
+  const validDeliveries = recentDeliveries.filter(
+    (d) => !isNaN(d.lat) && !isNaN(d.lng) && d.lat !== null && d.lng !== null
+  );
+
   // Calculate center from deliveries or use default
-  const defaultCenter: [number, number] = recentDeliveries.length > 0
-    ? [recentDeliveries[0].lat, recentDeliveries[0].lng]
+  const defaultCenter: [number, number] = validDeliveries.length > 0
+    ? [validDeliveries[0].lat, validDeliveries[0].lng]
     : [0, 0];
 
   return (
@@ -90,11 +95,11 @@ export default function LiveMapComponent({ recentDeliveries }: LiveMapComponentP
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {recentDeliveries.map((delivery, index) => (
+      {validDeliveries.map((delivery, index) => (
         <Marker
           key={`${delivery.lat}-${delivery.lng}-${index}`}
           position={[delivery.lat, delivery.lng]}
-          icon={createNumberedIcon(index + 1)}
+          icon={createNumberedIcon(validDeliveries.length - index)}
         >
           <Popup>
             <div style={{ textAlign: 'center', padding: '4px' }}>

@@ -368,8 +368,8 @@ export async function updateDeliveryStatus(
 // Log delivery location to Sheet2 (audit trail)
 export async function logDelivery(
   id: string,
-  lat: number,
-  lng: number
+  lat: number | string,
+  lng: number | string
 ): Promise<boolean> {
   const sheets = await getAuthenticatedClient();
   const sheetId = process.env.GOOGLE_SHEET_ID;
@@ -429,7 +429,13 @@ export async function getRecentDeliveries(count: number = 3): Promise<{
     const recentRows = dataRows.slice(0, count);
 
     return recentRows
-      .filter((row) => row[1] && row[2]) // Must have lat/lng
+      .filter((row) => {
+        // Must have lat/lng and they must be valid numbers (not "error")
+        if (!row[1] || !row[2]) return false;
+        const lat = parseFloat(row[1]);
+        const lng = parseFloat(row[2]);
+        return !isNaN(lat) && !isNaN(lng);
+      })
       .map((row) => ({
         lat: parseFloat(row[1]),
         lng: parseFloat(row[2]),
@@ -474,5 +480,73 @@ export async function getDeliveryStats(): Promise<{
   } catch (error) {
     console.error('Error fetching delivery stats:', error);
     return { delivered: 0, total: 0 };
+  }
+}
+
+// Reset all deliveries for a new day:
+// 1. Set all "Delivered" statuses back to "Not Delivered" in Sheet1
+// 2. Clear all data rows in Sheet2 (keep header)
+export async function resetDeliveries(): Promise<boolean> {
+  const sheets = await getAuthenticatedClient();
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+
+  if (!sheetId) {
+    throw new Error('GOOGLE_SHEET_ID is not configured');
+  }
+
+  try {
+    // Step 1: Get all rows from Sheet1 to find delivered ones
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: 'Sheet1!A:J',
+    });
+
+    const rows = response.data.values;
+    if (rows && rows.length > 1) {
+      // Build batch update for all rows that are "Delivered"
+      const updates: { range: string; values: string[][] }[] = [];
+      
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row[0] && row[9] === 'Delivered') {
+          // Row index in sheet is i + 1 (1-based, and we skipped header check with i starting at 1)
+          updates.push({
+            range: `Sheet1!J${i + 1}`,
+            values: [['Not Delivered']],
+          });
+        }
+      }
+
+      if (updates.length > 0) {
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: sheetId,
+          requestBody: {
+            valueInputOption: 'USER_ENTERED',
+            data: updates,
+          },
+        });
+      }
+    }
+
+    // Step 2: Clear Sheet2 data (keep header row)
+    // First check if Sheet2 has data
+    const sheet2Response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: 'Sheet2!A:D',
+    });
+
+    const sheet2Rows = sheet2Response.data.values;
+    if (sheet2Rows && sheet2Rows.length > 1) {
+      // Clear from row 2 onwards
+      await sheets.spreadsheets.values.clear({
+        spreadsheetId: sheetId,
+        range: `Sheet2!A2:D${sheet2Rows.length}`,
+      });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error resetting deliveries:', error);
+    return false;
   }
 }

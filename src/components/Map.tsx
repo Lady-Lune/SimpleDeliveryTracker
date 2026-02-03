@@ -82,7 +82,7 @@ function LocateControl() {
 
 interface MapComponentProps {
   recipients: Recipient[];
-  onStatusUpdate: (id: string, status: 'Not Delivered' | 'Next' | 'Delivered', location?: { lat: number; lng: number }) => void;
+  onStatusUpdate: (id: string, status: 'Not Delivered' | 'Next' | 'Delivered', location?: { lat: number | null; lng: number | null }) => void;
 }
 
 export default function MapComponent({ recipients, onStatusUpdate }: MapComponentProps) {
@@ -108,6 +108,7 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
 
   return (
     <MapContainer
+      key="main-map"
       center={defaultCenter}
       zoom={13}
       style={{ height: '100%', width: '100%' }}
@@ -235,13 +236,14 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
                             });
                           },
                           () => {
-                            // GPS failed, proceed without location
-                            onStatusUpdate(recipient.id, 'Delivered');
+                            // GPS failed, use recipient's coordinates as fallback
+                            onStatusUpdate(recipient.id, 'Delivered', recipient.coordinates || undefined);
                           },
                           { timeout: 5000, enableHighAccuracy: true }
                         );
                       } else {
-                        onStatusUpdate(recipient.id, 'Delivered');
+                        // Geolocation not supported, use recipient's coordinates as fallback
+                        onStatusUpdate(recipient.id, 'Delivered', recipient.coordinates || undefined);
                       }
                     }}
                     style={{
