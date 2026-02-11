@@ -212,19 +212,19 @@ export default function MapPage() {
     <div className="h-screen w-screen flex flex-col">
       {/* Header */}
       <header className="bg-zinc-900 text-white px-4 py-3 flex items-center justify-between z-10">
-        <h1 className="text-lg font-bold">Delivery Coordinator</h1>
+        <h1 className="text-2xl font-bold">Delivery Coordinator</h1>
         <div className="flex items-center gap-4">
           <button
             onClick={() => fetchRecipients(true)}
             disabled={refreshing}
-            className="text-sm text-zinc-400 hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
+            className="text-lg text-zinc-400 hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
           >
             <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
           <button
             onClick={handleLogout}
-            className="text-sm text-zinc-400 hover:text-white transition-colors"
+            className="text-lg text-zinc-400 hover:text-white transition-colors"
           >
             Logout
           </button>
@@ -232,20 +232,20 @@ export default function MapPage() {
       </header>
 
       {/* Stats Dashboard */}
-      <div className="bg-zinc-800 text-white px-4 py-2 flex gap-4 text-sm items-center">
+      <div className="bg-zinc-800 text-white px-4 py-2 flex gap-4 text-md items-center">
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-          {deliveredCount}/{totalRecipients} Delivered
+          <span className="w-5 h-5 bg-green-500 rounded-full"></span>
+          {deliveredCount}/{totalRecipients} : Delivered
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-          {inProgressCount} Next
+          <span className="w-5 h-5 bg-yellow-500 rounded-full"></span>
+          {inProgressCount} : Next
         </span>
         {deliveredCount === totalRecipients && totalRecipients > 0 && (
           <button
             onClick={handleEndDelivery}
             disabled={resetting}
-            className="ml-auto text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors disabled:opacity-50"
+            className="ml-auto text-lg bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors disabled:opacity-50"
           >
             {resetting ? 'Resetting...' : '🏁 End Delivery'}
           </button>
@@ -253,7 +253,7 @@ export default function MapPage() {
       </div>
 
       {/* Filter Controls */}
-      <div className="bg-zinc-700 text-white px-4 py-2 flex flex-wrap gap-3 text-sm items-center">
+      <div className="bg-zinc-700 text-white px-4 py-2 flex flex-wrap gap-3 text-lg items-center">
         {/* Status Filter */}
         <div className="flex items-center gap-2">
           <label htmlFor="status-filter" className="text-zinc-300">Status:</label>
@@ -261,7 +261,7 @@ export default function MapPage() {
             id="status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="bg-zinc-600 border border-zinc-500 rounded px-2 py-1 text-white text-sm"
+            className="bg-zinc-600 border border-zinc-500 rounded px-2 py-1 text-white text-lg"
           >
             <option value="all">All</option>
             <option value="Not Delivered">Not Delivered</option>
@@ -277,7 +277,7 @@ export default function MapPage() {
             id="faculty-filter"
             value={facultyFilter}
             onChange={(e) => setFacultyFilter(e.target.value)}
-            className="bg-zinc-600 border border-zinc-500 rounded px-2 py-1 text-white text-sm"
+            className="bg-zinc-600 border border-zinc-500 rounded px-2 py-1 text-white text-lg"
           >
             <option value="all">All</option>
             {faculties.map((faculty) => (
