@@ -14,57 +14,192 @@ export interface Recipient {
   status: 'Not Delivered' | 'Next' | 'Delivered';
 }
 
-// Parse coordinates from various Google Maps link formats
-export function parseCoordinates(mapLink: string): { lat: number; lng: number } | null {
-  if (!mapLink) return null;
+// Result type for coordinate parsing - includes error type for viewport-only links
+type ParseResult = 
+  | { success: true; lat: number; lng: number }
+  | { success: false; error: 'no_coordinates' | 'viewport_only' };
 
+// Validate that coordinates are within valid ranges
+function isValidCoordinate(lat: number, lng: number): boolean {
+  return (
+    !isNaN(lat) && !isNaN(lng) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180
+  );
+}
+
+// Convert DMS (Degrees, Minutes, Seconds) to decimal degrees
+// Example input: degrees=6, minutes=42, seconds=11.4, direction='N'
+function dmsToDecimal(degrees: number, minutes: number, seconds: number, direction: string): number {
+  let decimal = degrees + minutes / 60 + seconds / 3600;
+  if (direction === 'S' || direction === 'W') {
+    decimal = -decimal;
+  }
+  return decimal;
+}
+
+// Try to parse DMS coordinates from a URL-encoded place name
+// Example: "6%C2%B042'11.4%22N+80%C2%B047'13.6%22E" or "6°42'11.4"N+80°47'13.6"E"
+function parseDMSFromPlaceName(url: string): { lat: number; lng: number } | null {
   try {
-    // Format 1: https://www.google.com/maps?q=LAT,LNG
-    // Format 2: https://www.google.com/maps/place/.../@LAT,LNG,...
-    // Format 3: https://maps.google.com/?q=LAT,LNG
-    // Note: Short links (goo.gl, maps.app.goo.gl) are handled separately via resolveShortLink()
+    // URL decode first
+    const decoded = decodeURIComponent(url);
     
-    // Try to extract from @LAT,LNG format (common in place URLs)
-    const atMatch = mapLink.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-    if (atMatch) {
-      return {
-        lat: parseFloat(atMatch[1]),
-        lng: parseFloat(atMatch[2]),
-      };
+    // Match DMS pattern: degrees°minutes'seconds"direction
+    // Supports various encodings of degree (°), minute ('), second (")
+    // Pattern: NUMBER°NUMBER'NUMBER"[NSEW]
+    const dmsPattern = /(\d+)[°](\d+)[''′](\d+\.?\d*)["""″]([NS])\s*[+\s]*(\d+)[°](\d+)[''′](\d+\.?\d*)["""″]([EW])/i;
+    
+    const match = decoded.match(dmsPattern);
+    if (match) {
+      const lat = dmsToDecimal(
+        parseFloat(match[1]),
+        parseFloat(match[2]),
+        parseFloat(match[3]),
+        match[4].toUpperCase()
+      );
+      const lng = dmsToDecimal(
+        parseFloat(match[5]),
+        parseFloat(match[6]),
+        parseFloat(match[7]),
+        match[8].toUpperCase()
+      );
+      
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
     }
-
-    // Try to extract from q=LAT,LNG format
-    const qMatch = mapLink.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-    if (qMatch) {
-      return {
-        lat: parseFloat(qMatch[1]),
-        lng: parseFloat(qMatch[2]),
-      };
-    }
-
-    // Try to extract from ll=LAT,LNG format
-    const llMatch = mapLink.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
-    if (llMatch) {
-      return {
-        lat: parseFloat(llMatch[1]),
-        lng: parseFloat(llMatch[2]),
-      };
-    }
-
-    // Try to extract plain coordinates (LAT,LNG anywhere in the URL path)
-    const plainMatch = mapLink.match(/\/(-?\d+\.\d+),(-?\d+\.\d+)/);
-    if (plainMatch) {
-      return {
-        lat: parseFloat(plainMatch[1]),
-        lng: parseFloat(plainMatch[2]),
-      };
-    }
-
+    
     return null;
   } catch {
-    console.error('Error parsing coordinates from:', mapLink);
     return null;
   }
+}
+
+// Try to parse decimal coordinates from a place name in the URL
+// Example: "/place/6.7031,80.7871/" or "/place/6.7031,80.7871@"
+function parseDecimalFromPlaceName(url: string): { lat: number; lng: number } | null {
+  try {
+    // Match /place/LAT,LNG pattern (must be followed by / or @)
+    const placeDecimalPattern = /\/place\/(-?\d+\.?\d*),(-?\d+\.?\d*)(?:\/|@|$)/;
+    
+    const match = url.match(placeDecimalPattern);
+    if (match) {
+      const lat = parseFloat(match[1]);
+      const lng = parseFloat(match[2]);
+      
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Try to parse coordinates from Google Maps data parameter
+// Format: data=...!3dLAT!4dLNG... (these are precise marker coordinates)
+function parseFromDataParameter(url: string): { lat: number; lng: number } | null {
+  try {
+    // Match !3d (latitude) and !4d (longitude) in the data parameter
+    const latMatch = url.match(/!3d(-?\d+\.?\d*)/);
+    const lngMatch = url.match(/!4d(-?\d+\.?\d*)/);
+    
+    if (latMatch && lngMatch) {
+      const lat = parseFloat(latMatch[1]);
+      const lng = parseFloat(lngMatch[1]);
+      
+      if (isValidCoordinate(lat, lng)) {
+        return { lat, lng };
+      }
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Parse coordinates from various Google Maps link formats
+// Uses waterfall strategy: most precise methods first, viewport as detection only
+export function parseCoordinates(mapLink: string): ParseResult {
+  if (!mapLink) return { success: false, error: 'no_coordinates' };
+
+  try {
+    // STEP 1: Try q=LAT,LNG parameter (explicit search - MOST PRECISE)
+    const qMatch = mapLink.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (qMatch) {
+      const lat = parseFloat(qMatch[1]);
+      const lng = parseFloat(qMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { success: true, lat, lng };
+      }
+    }
+
+    // STEP 2: Try ll=LAT,LNG parameter (explicit lat/lng - VERY PRECISE)
+    const llMatch = mapLink.match(/[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (llMatch) {
+      const lat = parseFloat(llMatch[1]);
+      const lng = parseFloat(llMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        return { success: true, lat, lng };
+      }
+    }
+
+    // STEP 3: Try !3d/!4d in data parameter (marker coordinates - VERY PRECISE)
+    // Format: data=...!3dLAT!4dLNG... (used with Plus Codes and other place types)
+    const dataCoords = parseFromDataParameter(mapLink);
+    if (dataCoords) {
+      return { success: true, ...dataCoords };
+    }
+
+    // STEP 4: Try DMS coordinates in /place/ name (dropped pins - VERY PRECISE)
+    const dmsCoords = parseDMSFromPlaceName(mapLink);
+    if (dmsCoords) {
+      return { success: true, ...dmsCoords };
+    }
+
+    // STEP 5: Try decimal coordinates in /place/ name (dropped pins - VERY PRECISE)
+    const decimalCoords = parseDecimalFromPlaceName(mapLink);
+    if (decimalCoords) {
+      return { success: true, ...decimalCoords };
+    }
+
+    // STEP 6: Check if URL has @LAT,LNG (viewport center - IMPRECISE)
+    // We detect it but return an error since it's not reliable
+    const atMatch = mapLink.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (atMatch) {
+      const lat = parseFloat(atMatch[1]);
+      const lng = parseFloat(atMatch[2]);
+      if (isValidCoordinate(lat, lng)) {
+        // URL has coordinates but only viewport - not precise enough
+        return { success: false, error: 'viewport_only' };
+      }
+    }
+
+    // No coordinates found at all
+    return { success: false, error: 'no_coordinates' };
+  } catch {
+    console.error('Error parsing coordinates from:', mapLink);
+    return { success: false, error: 'no_coordinates' };
+  }
+}
+
+// Legacy wrapper that returns just coordinates or null (for backwards compatibility)
+export function parseCoordinatesSimple(mapLink: string): { lat: number; lng: number } | null {
+  const result = parseCoordinates(mapLink);
+  if (result.success) {
+    return { lat: result.lat, lng: result.lng };
+  }
+  return null;
+}
+
+// Get error message for sheet based on parse result
+export function getParseErrorMessage(result: ParseResult): string {
+  if (result.success) return '';
+  return result.error === 'viewport_only' ? 'viewport link error' : 'error';
 }
 
 // Check if a URL is a short link that needs resolution
@@ -91,8 +226,9 @@ async function resolveShortLink(shortUrl: string): Promise<string | null> {
 }
 
 // Parse coordinates from a link, resolving short links if needed
-async function parseCoordinatesAsync(mapLink: string): Promise<{ lat: number; lng: number } | null> {
-  if (!mapLink) return null;
+// Returns the full ParseResult to distinguish viewport-only from no-coordinates errors
+async function parseCoordinatesAsync(mapLink: string): Promise<ParseResult> {
+  if (!mapLink) return { success: false, error: 'no_coordinates' };
 
   let urlToParse = mapLink;
 
@@ -103,7 +239,7 @@ async function parseCoordinatesAsync(mapLink: string): Promise<{ lat: number; ln
       urlToParse = resolvedUrl;
     } else {
       // Couldn't resolve short link
-      return null;
+      return { success: false, error: 'no_coordinates' };
     }
   }
 
@@ -188,7 +324,7 @@ export async function getRecipients(): Promise<Recipient[]> {
     let coordinates: { lat: number; lng: number } | null = null;
     let needsShortLinkResolution = false;
 
-    if (latFromSheet && lngFromSheet && latFromSheet !== 'error' && lngFromSheet !== 'error') {
+    if (latFromSheet && lngFromSheet && latFromSheet !== 'error' && lngFromSheet !== 'error' && latFromSheet !== 'viewport link error' && lngFromSheet !== 'viewport link error') {
       // Try to use existing lat/lng from sheet
       const lat = parseFloat(latFromSheet);
       const lng = parseFloat(lngFromSheet);
@@ -204,23 +340,24 @@ export async function getRecipients(): Promise<Recipient[]> {
         needsShortLinkResolution = true;
       } else {
         // Try synchronous parsing for regular links
-        const parsed = parseCoordinates(googleMapLink);
-        if (parsed) {
-          coordinates = parsed;
+        const parseResult = parseCoordinates(googleMapLink);
+        if (parseResult.success) {
+          coordinates = { lat: parseResult.lat, lng: parseResult.lng };
           // Mark for update if sheet cells are empty
           if (!latFromSheet && !lngFromSheet) {
             rowsNeedingCoordinates.push({
               rowIndex: actualRowIndex,
-              lat: parsed.lat.toString(),
-              lng: parsed.lng.toString(),
+              lat: parseResult.lat.toString(),
+              lng: parseResult.lng.toString(),
             });
           }
         } else if (!latFromSheet && !lngFromSheet) {
-          // Parsing failed and cells are empty - mark as error
+          // Parsing failed and cells are empty - mark with appropriate error
+          const errorMsg = getParseErrorMessage(parseResult);
           rowsNeedingCoordinates.push({
             rowIndex: actualRowIndex,
-            lat: 'error',
-            lng: 'error',
+            lat: errorMsg,
+            lng: errorMsg,
           });
         }
       }
@@ -251,26 +388,27 @@ export async function getRecipients(): Promise<Recipient[]> {
   if (shortLinkRecipients.length > 0) {
     const resolutions = await Promise.all(
       shortLinkRecipients.map(async (pending) => {
-        const coords = await parseCoordinatesAsync(pending.recipient.googleMapLink);
-        return { pending, coords };
+        const parseResult = await parseCoordinatesAsync(pending.recipient.googleMapLink);
+        return { pending, parseResult };
       })
     );
 
     // Update recipients and track sheet updates
-    for (const { pending, coords } of resolutions) {
-      if (coords) {
-        pending.recipient.coordinates = coords;
+    for (const { pending, parseResult } of resolutions) {
+      if (parseResult.success) {
+        pending.recipient.coordinates = { lat: parseResult.lat, lng: parseResult.lng };
         rowsNeedingCoordinates.push({
           rowIndex: pending.actualRowIndex,
-          lat: coords.lat.toString(),
-          lng: coords.lng.toString(),
+          lat: parseResult.lat.toString(),
+          lng: parseResult.lng.toString(),
         });
       } else {
-        // Resolution failed - mark as error
+        // Resolution failed - mark with appropriate error
+        const errorMsg = getParseErrorMessage(parseResult);
         rowsNeedingCoordinates.push({
           rowIndex: pending.actualRowIndex,
-          lat: 'error',
-          lng: 'error',
+          lat: errorMsg,
+          lng: errorMsg,
         });
       }
     }
