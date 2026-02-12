@@ -128,6 +128,21 @@ export default function MapComponent({ recipients, onStatusUpdate }: MapComponen
         >
           <Popup>
             <div style={{ minWidth: '200px', padding: '4px' }}>
+              {/* Recipient ID Badge */}
+              <div style={{
+                display: 'inline-block',
+                padding: '2px 8px',
+                marginBottom: '8px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                fontWeight: 600,
+                color: '#374151',
+              }}>
+                #{recipient.id}
+              </div>
+
               {/* Recipient Type with color coding */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <span
